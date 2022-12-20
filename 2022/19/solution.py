@@ -3,6 +3,7 @@ from enum import Enum
 from collections import Counter
 from typing import Self, Final, NamedTuple
 import re
+from math import ceil
 
 
 class Rock(Enum):
@@ -19,38 +20,38 @@ LINE: Final[re.Pattern[str]] = re.compile(
     r'Each geode robot costs (?P<geode_robot_ore>\d+) ore and (?P<geode_robot_obsidian>\d+) obsidian.'
 )
 
+
 @dataclass
 class Blueprint:
-    robots: dict[Rock, Counter[Rock]]
+    recipes: dict[Rock, Counter[Rock]]
 
     @classmethod
     def from_str(cls, s: str) -> Self:
-        print(s)
         match = LINE.match(s)
         assert match is not None
-        robots = {
-            Rock.ORE: Counter({Rock.ORE: match['ore_robot']}),
-            Rock.CLAY: Counter({Rock.ORE: match['clay_robot']}),
+        recipes = {
+            Rock.ORE: Counter({Rock.ORE: int(match['ore_robot'])}),
+            Rock.CLAY: Counter({Rock.ORE: int(match['clay_robot'])}),
             Rock.OBSIDIAN: Counter({
-                Rock.ORE: match['obsidian_robot_ore'],
-                Rock.CLAY: match['obsidian_robot_clay']
+                Rock.ORE: int(match['obsidian_robot_ore']),
+                Rock.CLAY: int(match['obsidian_robot_clay'])
             }),
             Rock.GEODE: Counter({
-                Rock.ORE: match['geode_robot_ore'],
-                Rock.OBSIDIAN: match['geode_robot_obsidian']
+                Rock.ORE: int(match['geode_robot_ore']),
+                Rock.OBSIDIAN: int(match['geode_robot_obsidian'])
             })
         }
-        return cls(robots)
+        return cls(recipes)
 
-    def __getattribute__(self, name: str) -> Counter[Rock]:
-        return self.robots[name]
 
 def parse_file(filename: str) -> list[Blueprint]:
     with open(filename) as f:
         return [Blueprint.from_str(line) for line in f.read().splitlines()]
 
 
-print(parse_file('test.txt'))
+test = parse_file('test.txt')
+blueprints = parse_file('input.txt')
+# print(test)
 
 
 class State(NamedTuple):
@@ -59,6 +60,76 @@ class State(NamedTuple):
     time_left: int
 
 
-def next_states(state: State, blueprint: Blueprint) -> list[State]:
+def compute_next_states(
+    state: State, blueprint: Blueprint, max_state: State
+) -> list[State]:
+    next = []
+    robots, rocks, time_left = state
+    if time_left == 0:
+        return next
+
+    if (rocks[Rock.GEODE]*time_left + (time_left * (time_left + 1) / 2)) < max_state.rocks[Rock.GEODE]:
+        return next
+
     for robot in Rock:
-        dependencies = blueprint.robot
+        dependencies = blueprint.recipes[robot]
+
+        # If one dependency is not available
+        if any(state.robots[robot] == 0 for robot in dependencies):
+            continue
+
+        time_needed = max([
+            ceil((count - rocks[rock_needed]) / state.robots[rock_needed])
+            for rock_needed, count in dependencies.items()
+        ]) + 1
+        time_needed = max(1, time_needed)
+
+        if time_needed <= time_left:
+            next.append(State(
+                robots + Counter([robot]),
+                (
+                    rocks +
+                    Counter({rock: time_needed*c for rock, c in robots.items()}) -
+                    dependencies
+                ),
+                time_left - time_needed
+            ))
+
+    if (not next):
+        return [State(
+            robots,
+            rocks + Counter({rock: time_left*c for rock, c in robots.items()}),
+            0
+        )]
+
+    return next
+
+
+def search(initial_state: State, blueprint: Blueprint) -> State:
+    next_states = [initial_state]
+    max_state = initial_state
+    while next_states:
+        state = next_states.pop()
+        next_states += compute_next_states(state, blueprint, max_state)
+        if state.rocks[Rock.GEODE] > max_state.rocks[Rock.GEODE]:
+            max_state = state
+    return max_state
+
+
+initial_state = State(Counter([Rock.ORE]), Counter(), 24)
+# print(compute_next_states(initial_state, test[0]))
+# print(search(initial_state, test[0]))
+# print(search(initial_state, test[1]))
+
+def part_1(filename: str) -> int:
+    blueprints = parse_file(filename)
+    res = 0
+    for i, blueprint in enumerate(blueprints):
+        initial_state = State(Counter([Rock.ORE]), Counter(), 24)
+        max_geode = search(initial_state, blueprint).rocks[Rock.GEODE]
+        print(i, max_geode)
+        res += (i + 1) * max_geode
+    return res
+
+
+print(part_1('input.txt'))
