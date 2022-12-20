@@ -61,15 +61,12 @@ class State(NamedTuple):
 
 
 def compute_next_states(
-    state: State, blueprint: Blueprint, max_state: State
+    state: State, blueprint: Blueprint, max_geode: int
 ) -> list[State]:
-    next = []
+    next_states = []
     robots, rocks, time_left = state
     if time_left == 0:
-        return next
-
-    if (rocks[Rock.GEODE]*time_left + (time_left * (time_left + 1) / 2)) < max_state.rocks[Rock.GEODE]:
-        return next
+        return next_states
 
     for robot in Rock:
         dependencies = blueprint.recipes[robot]
@@ -81,11 +78,11 @@ def compute_next_states(
         time_needed = max([
             ceil((count - rocks[rock_needed]) / state.robots[rock_needed])
             for rock_needed, count in dependencies.items()
-        ]) + 1
-        time_needed = max(1, time_needed)
+        ])
+        time_needed = max(0, time_needed) + 1  # take one additional step to build
 
         if time_needed <= time_left:
-            next.append(State(
+            next_states.append(State(
                 robots + Counter([robot]),
                 (
                     rocks +
@@ -95,41 +92,58 @@ def compute_next_states(
                 time_left - time_needed
             ))
 
-    if (not next):
+    #  If we cant build, just collect rocks
+    if (not next_states):
         return [State(
             robots,
             rocks + Counter({rock: time_left*c for rock, c in robots.items()}),
             0
         )]
 
-    return next
+    time_left_after_build_robot = max(next_states, key=lambda x: x.time_left).time_left
+
+    max_number_of_geode = (
+        rocks[Rock.GEODE] +
+        robots[Rock.GEODE]*time_left +
+        (time_left_after_build_robot * (time_left_after_build_robot + 1) / 2)
+    )
+    if max_number_of_geode < max_geode:
+        return []
+
+    return next_states
 
 
 def search(initial_state: State, blueprint: Blueprint) -> State:
     next_states = [initial_state]
-    max_state = initial_state
+    max_geode = initial_state.rocks[Rock.GEODE]
     while next_states:
         state = next_states.pop()
-        next_states += compute_next_states(state, blueprint, max_state)
-        if state.rocks[Rock.GEODE] > max_state.rocks[Rock.GEODE]:
-            max_state = state
-    return max_state
+        next_states += compute_next_states(state, blueprint, max_geode)
+        if state.rocks[Rock.GEODE] > max_geode:
+            max_geode = state.rocks[Rock.GEODE]
+    return max_geode
 
 
-initial_state = State(Counter([Rock.ORE]), Counter(), 24)
-# print(compute_next_states(initial_state, test[0]))
-# print(search(initial_state, test[0]))
-# print(search(initial_state, test[1]))
+initial_state = State(Counter([Rock.ORE]), Counter(), 32)
+# initial_state = State(Counter([Rock.ORE, Rock.ORE, Rock.CLAY, Rock.OBSIDIAN]), Counter([Rock.ORE]*4), 24)
+# print(compute_next_states(initial_state, test[0], initial_state))
+# blueprints = parse_file('input.txt')
+print(search(initial_state, test[0]))
+
 
 def part_1(filename: str) -> int:
     blueprints = parse_file(filename)
     res = 0
     for i, blueprint in enumerate(blueprints):
         initial_state = State(Counter([Rock.ORE]), Counter(), 24)
-        max_geode = search(initial_state, blueprint).rocks[Rock.GEODE]
-        print(i, max_geode)
+        max_geode = search(initial_state, blueprint)
+        print(i + 1, max_geode)
         res += (i + 1) * max_geode
     return res
 
 
-print(part_1('input.txt'))
+def test_part_1():
+    assert part_1('test.txt') == 33
+
+
+# print(part_1('input.txt'))
