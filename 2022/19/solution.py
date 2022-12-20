@@ -68,8 +68,16 @@ def compute_next_states(
     if time_left == 0:
         return next_states
 
-    for robot in Rock:
+    for robot in reversed(Rock):
         dependencies = blueprint.recipes[robot]
+
+        # If we already have more robot that needed by the most expensive recipe
+        # This pruning was added based on online solution (works slowly without it)
+        if robot in [Rock.ORE, Rock.CLAY, Rock.OBSIDIAN]:  # NOT MY IDEA
+            if state.robots[robot] >= max(
+                need[robot] for _, need in blueprint.recipes.items()
+            ):
+                continue
 
         # If one dependency is not available
         if any(state.robots[robot] == 0 for robot in dependencies):
@@ -128,7 +136,7 @@ initial_state = State(Counter([Rock.ORE]), Counter(), 32)
 # initial_state = State(Counter([Rock.ORE, Rock.ORE, Rock.CLAY, Rock.OBSIDIAN]), Counter([Rock.ORE]*4), 24)
 # print(compute_next_states(initial_state, test[0], initial_state))
 # blueprints = parse_file('input.txt')
-print(search(initial_state, test[0]))
+# print(search(initial_state, test[0]))
 
 
 def part_1(filename: str) -> int:
@@ -147,3 +155,15 @@ def test_part_1():
 
 
 # print(part_1('input.txt'))
+
+def part_2(filename: str) -> int:
+    blueprints = parse_file(filename)
+    res = 1
+    for blueprint in blueprints[:3]:
+        initial_state = State(Counter([Rock.ORE]), Counter(), 32)
+        max_geode = search(initial_state, blueprint)
+        res *= max_geode
+    return res
+
+
+print(part_2('input.txt'))
