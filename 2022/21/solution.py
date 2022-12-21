@@ -90,20 +90,49 @@ print(depending('humn', test))
 
 def part_2(filename: str) -> int:
     monkeys = parse_file(filename)
-    monkeys['root'].op = lambda x, y: x == y
+
+    monkeys['root'].op = lambda x, y: x - y
     depend_on = {'humn'} | depending('humn', monkeys)
-    for i in tqdm(range(10_000_000)):
-        monkeys['humn'].inputs = [i]
-        if monkeys['root'].compute(monkeys):
-            return i
+
+    def diff(humn_val: int) -> int:
+        monkeys['humn'].inputs = [humn_val]
+        result = monkeys['root'].compute(monkeys)
 
         for m in depend_on:
             try:
                 delattr(monkeys[m], 'value')
             except AttributeError:
                 pass
+        return result
+
+    high_pos = 4_518_000_000_000
+    low_pos = 0
+    _val1, _val2 = diff(low_pos), diff(high_pos)
+    low_val, high_val = sorted([_val1, _val2])
+
+    if _val1 < 0 and _val2 > 0:
+        pos_greater_0 = high_pos
+        pos_lower_0 = low_pos
+    elif _val1 > 0 and _val2 < 0:
+        pos_greater_0 = low_pos
+        pos_lower_0 = high_pos
+    else:
+        raise ValueError("Range is too narrow and does not include positive and negative")
+
+    while True:
+        i = (pos_lower_0 + pos_greater_0) // 2
+
+        print(pos_lower_0, pos_greater_0)
+        res = diff(i)
+        if res == 0:
+            return i
+        elif res < 0:
+            pos_lower_0 = i
+        else:
+            pos_greater_0 = i
+
+    return high_val
 
 
-print(depending('humn', test))
 # print(part_2('test.txt'))
-# print(part_2('input.txt'))
+print(part_2('input.txt'))
