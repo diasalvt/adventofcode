@@ -1,6 +1,7 @@
-from typing import Self, Iterable, Optional
+from typing import Self, Iterable, Optional, Generator
 import re
-from itertools import pairwise
+from itertools import pairwise, chain, islice
+from collections import defaultdict
 
 
 Seeds = list[int]
@@ -13,14 +14,76 @@ def extract_int(s: str) -> list[int]:
     )
 
 
-def range_intersect_shift(
-    r: range, source_r: range, dest_r: range
-) -> Optional[range]:
-    shift = dest_r.start - source_r.start
-    return range(
-        max(r.start, source_r.start) + shift,
-        min(r.stop, source_r.stop) + shift
-    ) or None
+def in_range(r1: range, r2: range) -> bool:
+    if len(r1) == 0:
+        return True
+    if len(r2) == 0:
+        return False
+    return r1.start >= r2.start and r1.stop <= r2.stop
+
+
+def range_intersect(
+    r_a: range, r_b: range
+) -> dict:
+
+    def inter(r1: range, r2: range) -> Optional[range]:
+        return range(
+            max(r1.start, r2.start),
+            min(r1.stop, r2.stop)
+        ) or None
+
+    result = defaultdict(list)
+    r_a_and_r_b = inter(r_a, r_b)
+    if not r_a_and_r_b:
+        return {
+            'a': [r_a],
+            'b': [r_b],
+            'inter': []
+        }
+
+    points = sorted([
+        r_a.start,
+        r_a.stop - 1,
+        r_b.start,
+        r_b.stop - 1
+    ])
+
+    for x, y in pairwise(points):
+        r = range(x, y + 1)
+        cutted_r = range(
+            x + 1 if x in r_a_and_r_b else x,
+            y if y in r_a_and_r_b else y + 1
+        )
+        match in_range(r, r_a), in_range(r, r_b):
+            case True, False:
+                result['a'] += [cutted_r]
+            case False, True:
+                result['b'] += [cutted_r]
+            case True, True:
+                result['inter'] += [r]
+            case _:
+                raise ValueError('Range intersect failure')
+
+    return result
+
+
+def range_shift(r: range, shift: int) -> range:
+    return range(r.start + shift, r.stop + shift)
+
+
+def transformed_range(
+    r: range, r_source: range, r_dest: range
+) -> tuple[list[range], list[range]]:
+    intersection = range_intersect(r, r_source)
+    shift = r_dest.start - r_source.start
+    return (
+        intersection['a'],
+        [range_shift(inter, shift) for inter in intersection['inter']]
+    )
+
+
+# print(range_intersect(range(2, 5), range(4, 8)))
+# print(range_intersect(range(2, 5), range(3, 4)))
 
 
 class RangeMap:
@@ -29,7 +92,6 @@ class RangeMap:
 
     @classmethod
     def from_data(cls, data: list[tuple[int, int, int]]) -> Self:
-        print(data)
         return cls(
             [
                 (
@@ -53,13 +115,20 @@ class RangeMap:
         return idx
 
     def transform_range(self: Self, r: range) -> Iterable[range]:
-        return list(filter(
-            lambda x: x is not None,
-            (
-                range_intersect_shift(r, range_source, range_dest)
-                for range_source, range_dest in self.mapping
-            )
-        ))
+        current_input = [r]
+        next_input = []
+        output = []
+        for range_source, range_dest in self.mapping:
+            for r_in in current_input:
+                not_inter, inter = transformed_range(r_in, range_source, range_dest)
+                output.extend(inter)
+                next_input.extend(not_inter)
+            current_input = next_input
+            next_input = []
+        return output + current_input
+
+    def __repr__(self):
+        return str(self.mapping)
 
 
 def test_rangemap():
@@ -98,7 +167,15 @@ def test_transform_seed():
 
 print(min(transform_seed(seed, mappings) for seed in seeds))
 
-seeds = (range(start, length) for start, length in pairwise(seeds))
+
+def batched(iterable: Iterable, n: int) -> Generator:
+    it = iter(iterable)
+    while batch := tuple(islice(it, n)):
+        yield batch
+
+
+seeds = [range(start, start + length) for start, length in batched(seeds, 2)]
+print(seeds)
 
 
 def transform_range_seed(range_seed: range, mappings: list[RangeMap]) -> int:
@@ -107,7 +184,6 @@ def transform_range_seed(range_seed: range, mappings: list[RangeMap]) -> int:
 
     for m in mappings:
         for r in current_range:
-            print(r)
             next_range.extend(m.transform_range(r))
         current_range = next_range
         next_range = []
@@ -116,3 +192,9 @@ def transform_range_seed(range_seed: range, mappings: list[RangeMap]) -> int:
 
 
 print(transform_range_seed(range(79, 79 + 14), mappings_test))
+print(
+    min(
+        min(r.start for r in transform_range_seed(r, mappings))
+        for r in seeds
+    )
+)
