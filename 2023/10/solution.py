@@ -19,6 +19,11 @@ connection_types: dict[str, ConnectionType] = {
     'S': {-1, 1, 1j, -1j}
 }
 
+connection_str: dict[ConnectionType, str] = {
+    frozenset(v): k
+    for k, v in connection_types.items()
+}
+
 Pos = complex
 Map = dict[Pos, ConnectionType]
 
@@ -65,7 +70,6 @@ def solve_start(map: Map) -> list[Pos]:
 
 def farthest(map: Map) -> int:
     start, start_type = solve_start(map)
-    print(f'{start=}; {start_type}')
     dir1, dir2 = start_type
 
     return ceil(len(list(follow_pipe(start + dir1, -dir1, map))) / 2)
@@ -92,31 +96,23 @@ def is_interior(pos: Pos, loop: Map) -> bool:
     if pos in loop:
         return False
 
-    counter = 0
-    return symbols
-
-
-map_test2 = load('test2.txt')
-print(is_interior(4j + 10, loop_map(map_test2)))
-
-print(
-    sum(
-        is_interior(x + y * 1j, loop_map(map_test2))
-        for x in range(max(int(p.real) for p in map_test2))
-        for y in range(max(int(p.imag) for p in map_test2))
+    x, y = int(pos.real), int(pos.imag)
+    symbols = ''.join([
+        connection_str[frozenset(loop[x_i + y * 1j])]
+        for x_i in range(x) if x_i + y * 1j in loop
+    ])
+    symbols = (
+        symbols.
+        replace('-', '').
+        replace('LJ', '').
+        replace('F7', '').
+        replace('FJ', '|').
+        replace('L7', '|')
     )
-)
+
+    return len(symbols) % 2 == 1
 
 
-map_test3 = load('test3.txt')
-
-print(
-    sum(
-        is_interior(x + y * 1j, loop_map(map_test3))
-        for x in range(max(int(p.real) for p in map_test3))
-        for y in range(max(int(p.imag) for p in map_test3))
-    )
-)
 print(
     sum(
         is_interior(x + y * 1j, loop)
