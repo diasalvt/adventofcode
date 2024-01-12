@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Any, Self
+from typing import Any, Self, Generator
 
 
 Pos = tuple[int, int]
@@ -20,6 +20,7 @@ class Array:
         i, j = pos
         return (0 <= i <= self.height) & (0 <= j <= self.width)
 
+    def __iter__(self) -> Generator:
 
 @dataclass
 class Walk:
