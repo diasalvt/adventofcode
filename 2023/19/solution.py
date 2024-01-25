@@ -1,6 +1,6 @@
 from operator import lt, gt
 from dataclasses import dataclass
-from typing import Self, Callable, Optional, Any
+from typing import Self, Callable, Optional, ClassVar
 import re
 
 
@@ -41,6 +41,7 @@ class Instruction:
 @dataclass
 class NamedWorkflows:
     workflows: dict[str, list[Instruction]]
+    instruction_constructor: ClassVar = Instruction
 
     @classmethod
     def from_str(cls, s: str) -> Self:
@@ -49,7 +50,7 @@ class NamedWorkflows:
             name, _workflow = line.split('{')
             workflow = _workflow[:-1]
             named_workflows[name] = [
-                Instruction.from_str(inst)
+                cls.instruction_constructor.from_str(inst)
                 for inst in workflow.split(',')
             ]
         return cls(named_workflows)
@@ -76,10 +77,11 @@ def load(filename: str) -> tuple[NamedWorkflows, list[dict[str, int]]]:
                 for key_val in line.split(',')
             }
         )
-    return NamedWorkflows.from_str(workflows), parts
+    return workflows, parts
 
 
-instructions, parts = load('input.txt')
+instructions_str, parts = load('input.txt')
+instructions = NamedWorkflows.from_str(instructions_str)
 print(sum(sum(p.values()) for p in parts if instructions.run(p)))
 
 
@@ -121,3 +123,44 @@ class InstructionRange(Instruction):
             return [(vars_range_true, self.ret), (vars_range_false, None)]
         else:
             return [(vars_range, self.ret)]
+
+
+@dataclass
+class NamedWorkflowsRange(NamedWorkflows):
+    instruction_constructor: ClassVar = InstructionRange
+
+    def _run_workflow(self, vars_range: VarsRange, name: str) -> bool:
+        res = set()
+        for instruction in self.workflows[name]:
+            vars_range_ret = instruction.run(vars)
+            for vars_range, ret in vars_range_ret:
+                match ret:
+                    case True:
+                        res.update(vars_range)
+                    case False:
+                        pass
+                    case str():
+                        res |= self._run_workflow(vars_range, ret)
+        return res
+
+    def run(self, vars: Vars) -> bool:
+        return self._run_workflow(vars, 'in')
+
+
+def load(filename: str) -> tuple[NamedWorkflows, list[dict[str, int]]]:
+    workflows, parts_str = open(filename).read().split('\n\n')
+    parts = []
+    for line in parts_str.splitlines():
+        line = line[1:-1]
+        parts.append(
+            {
+                key_val[0]: int(key_val[2:])
+                for key_val in line.split(',')
+            }
+        )
+    return NamedWorkflowsRange.from_str(workflows), parts
+
+
+instructions = NamedWorkflowsRange.from_str(instructions_str)
+print(instructions.run(parts[0]))
+# print(sum(sum(p.values()) for p in parts if instructions.run(p)))
