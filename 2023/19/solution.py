@@ -86,7 +86,7 @@ print(sum(sum(p.values()) for p in parts if instructions.run(p)))
 
 
 Range = tuple[int, int]
-VarsRange = dict[str, set[Range]]
+VarsRange = dict[str, Range]
 
 
 def split_range(r: Range, cond: Callable, val: int) -> Optional[Range]:
@@ -102,22 +102,16 @@ def split_range(r: Range, cond: Callable, val: int) -> Optional[Range]:
             return None
 
 
-def split_set_range(
-    s_range: set[Range], cond: Callable, val: int
-) -> set[Range]:
-    return {split_range(r, cond, val) for r in s_range}
-
-
 class InstructionRange(Instruction):
-    def run(self, vars_range: VarsRange) -> tuple[VarsRange, str | bool]:
+    def run(self, vars_range: VarsRange) -> list[tuple[VarsRange, str | bool]]:
 
         if self.cond:
             vars_range_true, vars_range_false = dict(vars_range), dict(vars_range)
-            vars_range_true[self.var] = split_set_range(
+            vars_range_true[self.var] = split_range(
                 vars_range[self.var], self.cond, self.val
             )
 
-            vars_range_false[self.var] = split_set_range(
+            vars_range_false[self.var] = split_range(
                 vars_range[self.var], lambda x, y: not self.cond(x, y), self.val
             )
             return [(vars_range_true, self.ret), (vars_range_false, None)]
@@ -125,42 +119,53 @@ class InstructionRange(Instruction):
             return [(vars_range, self.ret)]
 
 
+def intersection(
+    a: tuple[int, int], b: tuple[int, int]
+) -> tuple[int, int]:
+    return (max(a[0], b[0]), min(a[1], b[1]))
+
+
+def count(vars_range: VarsRange) -> int:
+    res = sum(y - x for x, y in vars_range.values())
+    return res if res > 0 else 0
+
+
+def union(v_ranges_1: list[VarsRange], v_ranges_2: list[VarsRange]) -> int:
+    count_v_1 = count(v_ranges_1)
+    count_v_2 = count(v_ranges_2)
+    count_v_1_inter_v_2 = count({
+        var: intersection(v_range_1, v_range_2)
+        for var, (v_range_1, v_range_2) in zip(
+            v_ranges_1.keys(), zip(v_ranges_1.values(), v_ranges_2.values())
+        )
+    })
 @dataclass
 class NamedWorkflowsRange(NamedWorkflows):
     instruction_constructor: ClassVar = InstructionRange
 
-    def _run_workflow(self, vars_range: VarsRange, name: str) -> bool:
-        res = set()
+    def _run_workflow(self, vars_range: VarsRange, name: str) -> list[VarsRange]:
+        res = []
         for instruction in self.workflows[name]:
-            vars_range_ret = instruction.run(vars)
+            vars_range_ret = instruction.run(vars_range)
             for vars_range, ret in vars_range_ret:
                 match ret:
                     case True:
-                        res.update(vars_range)
-                    case False:
-                        pass
+                        res += [vars_range]
                     case str():
-                        res |= self._run_workflow(vars_range, ret)
+                        res += self._run_workflow(vars_range, ret)
         return res
 
-    def run(self, vars: Vars) -> bool:
-        return self._run_workflow(vars, 'in')
+    def run(self, vars_range: VarsRange) -> bool:
+        return sum(y - x for x, y in self._run_workflow(vars_range, 'in'))
 
 
-def load(filename: str) -> tuple[NamedWorkflows, list[dict[str, int]]]:
-    workflows, parts_str = open(filename).read().split('\n\n')
-    parts = []
-    for line in parts_str.splitlines():
-        line = line[1:-1]
-        parts.append(
-            {
-                key_val[0]: int(key_val[2:])
-                for key_val in line.split(',')
-            }
-        )
-    return NamedWorkflowsRange.from_str(workflows), parts
-
-
+instructions_test_str, parts = load('test.txt')
+instructions_test = NamedWorkflowsRange.from_str(instructions_test_str)
 instructions = NamedWorkflowsRange.from_str(instructions_str)
-print(instructions.run(parts[0]))
+print(instructions_test.run({
+    'x': (1, 4000),
+    'm': (1, 4000),
+    'a': (1, 4000),
+    's': (1, 4000)
+}))
 # print(sum(sum(p.values()) for p in parts if instructions.run(p)))
