@@ -2,6 +2,7 @@ from operator import lt, gt
 from dataclasses import dataclass
 from typing import Self, Callable, Optional, ClassVar
 import re
+from math import prod
 
 
 _COND = {'<': lt, '>': gt}
@@ -95,9 +96,9 @@ def split_range(r: Range, cond: Callable, val: int) -> Optional[Range]:
         case True, True:
             return (r1, r2)
         case False, True:
-            return (val + 1, r2)
+            return (val + (0 if cond(val, val) else 1), r2)
         case True, False:
-            return (r1, val - 1)
+            return (r1, val - (0 if cond(val, val) else 1))
         case _:
             return None
 
@@ -119,26 +120,42 @@ class InstructionRange(Instruction):
             return [(vars_range, self.ret)]
 
 
-def intersection(
-    a: tuple[int, int], b: tuple[int, int]
-) -> tuple[int, int]:
-    return (max(a[0], b[0]), min(a[1], b[1]))
-
-
 def count(vars_range: VarsRange) -> int:
-    res = sum(y - x for x, y in vars_range.values())
-    return res if res > 0 else 0
+    return prod(y - x + 1 if x <= y else 0 for x, y in vars_range.values())
 
 
-def union(v_ranges_1: list[VarsRange], v_ranges_2: list[VarsRange]) -> int:
-    count_v_1 = count(v_ranges_1)
-    count_v_2 = count(v_ranges_2)
-    count_v_1_inter_v_2 = count({
-        var: intersection(v_range_1, v_range_2)
-        for var, (v_range_1, v_range_2) in zip(
-            v_ranges_1.keys(), zip(v_ranges_1.values(), v_ranges_2.values())
-        )
-    })
+# def intersection_range(
+#     a: tuple[int, int], b: tuple[int, int]
+# ) -> tuple[int, int]:
+#     return (max(a[0], b[0]), min(a[1], b[1]))
+
+
+# def intersection_v1_v2(v1: VarsRange, v2: VarsRange) -> VarsRange:
+#     return {
+#         var: intersection_range(v_range_1, v_range_2)
+#         for var, (v_range_1, v_range_2) in zip(
+#             v1.keys(), zip(v1.values(), v2.values())
+#         )
+#     }
+
+
+# def intersection(l_v: list[VarsRange]) -> VarsRange:
+#     return reduce(intersection_v1_v2, l_v)
+
+
+# def count_union(l_v_ranges: list[VarsRange]) -> int:
+#     match l_v_ranges:
+#         case []:
+#             return 0
+#         case [v_range, *tail]:
+#             return count(v_range) + count_union(tail) - count_union(
+#                 [intersection_v1_v2(v_range, v) for v in tail]
+#             )
+
+def dummy_count_union(l_v_ranges):
+    return sum(count(v) for v in l_v_ranges)
+
+
 @dataclass
 class NamedWorkflowsRange(NamedWorkflows):
     instruction_constructor: ClassVar = InstructionRange
@@ -156,13 +173,13 @@ class NamedWorkflowsRange(NamedWorkflows):
         return res
 
     def run(self, vars_range: VarsRange) -> bool:
-        return sum(y - x for x, y in self._run_workflow(vars_range, 'in'))
+        return dummy_count_union(self._run_workflow(vars_range, 'in'))
 
 
 instructions_test_str, parts = load('test.txt')
 instructions_test = NamedWorkflowsRange.from_str(instructions_test_str)
 instructions = NamedWorkflowsRange.from_str(instructions_str)
-print(instructions_test.run({
+print(instructions.run({
     'x': (1, 4000),
     'm': (1, 4000),
     'a': (1, 4000),
