@@ -2,7 +2,14 @@ import abc
 from dataclasses import dataclass
 
 
-Pulse = tuple[int, bool]  # False = Low, True = High
+Pulse = bool  # False = Low, True = High
+
+
+def encapsulate_pulse(process_function):
+    def f(*args, **kwargs):
+        results = process_function(*args, **kwargs)
+        return tuple([(elem[0] + 1, elem[1]) for elem in results])
+    return f
 
 
 @abstract
@@ -18,12 +25,14 @@ class Module(abc.ABC):
 
 @dataclass
 class Button(Module):
+    @encapsulate_pulse
     def process(self, *inputs: Pulse) -> tuple[Pulse]:
         return (False,)
 
 
 @dataclass
 class Broadcaster(Module):
+    @encapsulate_pulse
     def process(self, *inputs: Pulse) -> tuple[Pulse]:
         return tuple([inputs[0] for _ in self.outputs])
 
@@ -32,6 +41,7 @@ class Broadcaster(Module):
 class FlipFlop(Module):
     is_on: bool = False
 
+    @encapsulate_pulse
     def process(self, *inputs: Pulse) -> tuple[Pulse]:
         if len(inputs) > 1:
             raise ValueError(
@@ -53,6 +63,10 @@ class Conjunction(Module):
         self.outputs = outputs
         self.memory = tuple([False for _ in outputs])
 
+    @encapsulate_pulse
     def process(self, *inputs: Pulse) -> tuple[Pulse]:
         self.memory
+
+
+def 
 def load(filename: str) -> list[Module]
