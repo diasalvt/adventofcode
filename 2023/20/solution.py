@@ -1,40 +1,55 @@
 import abc
 from dataclasses import dataclass
+from typing import Optional
 
 
-Pulse = bool  # False = Low, True = High
+Pulse = tuple[int, bool]  # False = Low, True = High
 
 
 def encapsulate_pulse(process_function):
-    def f(*args, **kwargs):
-        results = process_function(*args, **kwargs)
-        return tuple([(elem[0] + 1, elem[1]) for elem in results])
+    def f(self, *args, **kwargs):
+        pulse = process_function(self, *args, **kwargs)
+        if pulse is None:
+            return []
+        return [(pulse, output) for output in self.outputs]
     return f
 
 
-@abstract
 @dataclass
 class Module(abc.ABC):
-    inputs: tuple[Module]
-    outputs: tuple[Module]
+    outputs: tuple
 
     @abc.abstractmethod
-    def process(self, *inputs: Pulse) -> tuple[Pulse]:
+    def process(self, inp: Pulse) -> Optional[Pulse]:
         pass
 
 
 @dataclass
 class Button(Module):
     @encapsulate_pulse
-    def process(self, *inputs: Pulse) -> tuple[Pulse]:
-        return (False,)
+    def process(self) -> Optional[Pulse]:
+        return False
+
+
+def test_button():
+    b = Button(())
+    assert not Button((b,)).process()[0] == (1, False, b)
 
 
 @dataclass
 class Broadcaster(Module):
     @encapsulate_pulse
-    def process(self, *inputs: Pulse) -> tuple[Pulse]:
-        return tuple([inputs[0] for _ in self.outputs])
+    def process(self, inp: Pulse) -> Optional[Pulse]:
+        return inp
+
+
+b = Button(())
+print(Broadcaster((b,)).process((1, True)))
+
+
+def test_broadcaster():
+    b = Button(())
+    assert Broadcaster((b,)).process((1, True))[0] == (2, True, b)
 
 
 @dataclass
@@ -42,31 +57,22 @@ class FlipFlop(Module):
     is_on: bool = False
 
     @encapsulate_pulse
-    def process(self, *inputs: Pulse) -> tuple[Pulse]:
-        if len(inputs) > 1:
-            raise ValueError(
-                f'Inputs should be of size 1 for FlipFlop: received {inputs}'
-            )
-        priority, pulse = inputs[0]
+    def process(self, inp: Pulse) -> Optional[Pulse]:
+        priority, pulse = inp
         if pulse:
-            return []
+            return None
 
         self.is_on = not self.is_on
-        return tuple([self.is_on for _ in self.outputs])
+        return (priority, self.is_on)
 
 
 @dataclass
 class Conjunction(Module):
 
-    def __init__(self, inputs: tuple[Module], outputs: tuple[Module]):
-        self.inputs = inputs
+    def __init__(self, outputs: tuple[Module]):
         self.outputs = outputs
         self.memory = tuple([False for _ in outputs])
 
     @encapsulate_pulse
-    def process(self, *inputs: Pulse) -> tuple[Pulse]:
+    def process(self, inp: Pulse) -> Pulse:
         self.memory
-
-
-def 
-def load(filename: str) -> list[Module]
