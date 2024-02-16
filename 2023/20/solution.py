@@ -1,7 +1,7 @@
 import abc
-from dataclasses import dataclass
-from typing import Optional
-from collections import defaultdict
+from dataclasses import dataclass, field
+from typing import Optional, Self
+from collections import Counter
 
 
 Pulse = bool  # False = Low, True = High
@@ -9,11 +9,16 @@ Pulse = bool  # False = Low, True = High
 
 @dataclass
 class Module(abc.ABC):
-    outputs: tuple[str]
+    outputs: list[str]
+    inputs: list[str] = field(default_factory=list)
 
     @abc.abstractmethod
     def process(self, inp: Pulse, from_module: str) -> Optional[Pulse]:
         pass
+
+    def update_inputs(self, input_name: str) -> Self:
+        self.inputs.append(input_name)
+        return self
 
 
 @dataclass
@@ -42,11 +47,16 @@ class FlipFlop(Module):
 
 @dataclass
 class Conjunction(Module):
-    memory = defaultdict(bool)
+    memory: dict[str, bool] = field(default_factory=dict)
+
+    def update_inputs(self, input_name: str) -> Self:
+        self.inputs.append(input_name)
+        self.memory[input_name] = False
+        return self
 
     def process(self, inp: Pulse, from_module: str) -> Pulse:
         self.memory[from_module] = inp
-        return all(self.memory.values())
+        return not all(self.memory.values())
 
 
 Event = tuple[int, Pulse, Module, Module]
@@ -54,9 +64,13 @@ Event = tuple[int, Pulse, Module, Module]
 
 def load(filename: str) -> dict[str, Module]:
 
-    def row_to_module(s: str) -> tuple[str, Module]:
+    def parse(s: str) -> tuple[str, tuple[str]]:
         inp, outputs = s.strip().split(' -> ')
         outputs = tuple(outputs.split(', '))
+        return inp, outputs
+
+    def row_to_module(s: str) -> tuple[str, Module]:
+        inp, outputs = parse(s)
 
         match inp[0]:
             case 'b':
@@ -68,21 +82,31 @@ def load(filename: str) -> dict[str, Module]:
             case _:
                 raise ValueError(f'{inp=} is not valid.')
 
-    with open(filename) as f:
-        return {
-            module_name: module
-            for module_name, module in map(row_to_module, f)
-        }
+    rows = list(open(filename))
+    d = {
+        module_name: module
+        for module_name, module in map(row_to_module, rows)
+    }
+
+    for inp, outputs in map(parse, rows):
+        for out in outputs:
+            if out in d:
+                if inp[0] in ['%', '&']:
+                    d[out].update_inputs(inp[1:])
+                else:
+                    d[out].update_inputs(inp)
+
+    return d
 
 
 test = load('test.txt')
-test2 = load('test2.txt')
 print(test)
 
 
 def run(modules: dict[str, Module], press_button: int = 1) -> list[Module]:
     b = Button(('broadcaster',))
     modules['button'] = b
+    pulse_counter = Counter()
 
     def exec_event(event: Event, modules: dict[str, Module]) -> list[Event]:
         priority, pulse_in, sender, receiver = event
@@ -97,17 +121,20 @@ def run(modules: dict[str, Module], press_button: int = 1) -> list[Module]:
         ]
 
     pulse_processed = []
+    mem = []
     for i in range(press_button):
         queue: list[Event] = [(0, False, 'void', 'button')]
 
         while queue:
             event = queue.pop(0)
-            print(event)
             modules, new_events = exec_event(event, modules)
-            pulse_processed.extend([e for _, e, _, _ in new_events])
+            pulse_counter.update([e for _, e, _, _ in new_events])
             queue.extend(new_events)
             queue = sorted(queue)
 
-    return pulse_processed
+    return pulse_counter
 
-print(sum(run(test, 1)))
+
+data = load('input.txt')
+c = run(data, 1000)
+print(c[False] * c[True])
