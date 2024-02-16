@@ -1,78 +1,113 @@
 import abc
 from dataclasses import dataclass
 from typing import Optional
+from collections import defaultdict
 
 
-Pulse = tuple[int, bool]  # False = Low, True = High
-
-
-def encapsulate_pulse(process_function):
-    def f(self, *args, **kwargs):
-        pulse = process_function(self, *args, **kwargs)
-        if pulse is None:
-            return []
-        return [(pulse, output) for output in self.outputs]
-    return f
+Pulse = bool  # False = Low, True = High
 
 
 @dataclass
 class Module(abc.ABC):
-    outputs: tuple
+    outputs: tuple[str]
 
     @abc.abstractmethod
-    def process(self, inp: Pulse) -> Optional[Pulse]:
+    def process(self, inp: Pulse, from_module: str) -> Optional[Pulse]:
         pass
 
 
 @dataclass
 class Button(Module):
-    @encapsulate_pulse
-    def process(self) -> Optional[Pulse]:
+    def process(self, inp: Pulse, from_module: str) -> Optional[Pulse]:
         return False
-
-
-def test_button():
-    b = Button(())
-    assert not Button((b,)).process()[0] == (1, False, b)
 
 
 @dataclass
 class Broadcaster(Module):
-    @encapsulate_pulse
-    def process(self, inp: Pulse) -> Optional[Pulse]:
+    def process(self, inp: Pulse, from_module: str) -> Optional[Pulse]:
         return inp
-
-
-b = Button(())
-print(Broadcaster((b,)).process((1, True)))
-
-
-def test_broadcaster():
-    b = Button(())
-    assert Broadcaster((b,)).process((1, True))[0] == (2, True, b)
 
 
 @dataclass
 class FlipFlop(Module):
     is_on: bool = False
 
-    @encapsulate_pulse
-    def process(self, inp: Pulse) -> Optional[Pulse]:
-        priority, pulse = inp
-        if pulse:
+    def process(self, inp: Pulse, from_module: str) -> Optional[Pulse]:
+        if inp:
             return None
 
         self.is_on = not self.is_on
-        return (priority, self.is_on)
+        return self.is_on
 
 
 @dataclass
 class Conjunction(Module):
+    memory = defaultdict(bool)
 
-    def __init__(self, outputs: tuple[Module]):
-        self.outputs = outputs
-        self.memory = tuple([False for _ in outputs])
+    def process(self, inp: Pulse, from_module: str) -> Pulse:
+        self.memory[from_module] = inp
+        return all(self.memory.values())
 
-    @encapsulate_pulse
-    def process(self, inp: Pulse) -> Pulse:
-        self.memory
+
+Event = tuple[int, Pulse, Module, Module]
+
+
+def load(filename: str) -> dict[str, Module]:
+
+    def row_to_module(s: str) -> tuple[str, Module]:
+        inp, outputs = s.strip().split(' -> ')
+        outputs = tuple(outputs.split(', '))
+
+        match inp[0]:
+            case 'b':
+                return (inp, Broadcaster(outputs))
+            case '%':
+                return (inp[1:], FlipFlop(outputs))
+            case '&':
+                return (inp[1:], Conjunction(outputs))
+            case _:
+                raise ValueError(f'{inp=} is not valid.')
+
+    with open(filename) as f:
+        return {
+            module_name: module
+            for module_name, module in map(row_to_module, f)
+        }
+
+
+test = load('test.txt')
+test2 = load('test2.txt')
+print(test)
+
+
+def run(modules: dict[str, Module], press_button: int = 1) -> list[Module]:
+    b = Button(('broadcaster',))
+    modules['button'] = b
+
+    def exec_event(event: Event, modules: dict[str, Module]) -> list[Event]:
+        priority, pulse_in, sender, receiver = event
+        if receiver not in modules:
+            return modules, []
+
+        pulse_out = modules[receiver].process(pulse_in, sender)
+        return modules, [
+            (priority + 1, pulse_out, receiver, output)
+            for output in modules[receiver].outputs
+            if pulse_out is not None
+        ]
+
+    pulse_processed = []
+    for i in range(press_button):
+        queue: list[Event] = [(0, False, 'void', 'button')]
+
+        while queue:
+            event = queue.pop(0)
+            print(event)
+            modules, new_events = exec_event(event, modules)
+            pulse_processed.extend([e for _, e, _, _ in new_events])
+            queue.extend(new_events)
+            queue = sorted(queue)
+
+    return pulse_processed
+
+print(sum(run(test, 1)))
