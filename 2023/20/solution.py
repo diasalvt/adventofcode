@@ -1,7 +1,9 @@
 import abc
 from dataclasses import dataclass, field
 from typing import Optional, Self
-from collections import Counter
+from collections import Counter, defaultdict
+from itertools import pairwise
+from math import lcm
 
 
 Pulse = bool  # False = Low, True = High
@@ -99,42 +101,49 @@ def load(filename: str) -> dict[str, Module]:
     return d
 
 
-test = load('test.txt')
-print(test)
-
-
 def run(modules: dict[str, Module], press_button: int = 1) -> list[Module]:
     b = Button(('broadcaster',))
     modules['button'] = b
     pulse_counter = Counter()
 
     def exec_event(event: Event, modules: dict[str, Module]) -> list[Event]:
-        priority, pulse_in, sender, receiver = event
+        priority, _, pulse_in, sender, receiver = event
         if receiver not in modules:
             return modules, []
 
         pulse_out = modules[receiver].process(pulse_in, sender)
         return modules, [
-            (priority + 1, pulse_out, receiver, output)
-            for output in modules[receiver].outputs
+            (priority + 1, i, pulse_out, receiver, output)
+            for i, output in enumerate(modules[receiver].outputs)
             if pulse_out is not None
         ]
 
-    pulse_processed = []
-    mem = []
-    for i in range(press_button):
-        queue: list[Event] = [(0, False, 'void', 'button')]
+    modules_to_watch = ['sk', 'qz', 'sv', 'dr']
+    save = defaultdict(list)
+    for i in range(1, press_button + 1):
+        queue: list[Event] = [(0, 0, False, 'void', 'button')]
 
         while queue:
             event = queue.pop(0)
             modules, new_events = exec_event(event, modules)
-            pulse_counter.update([e for _, e, _, _ in new_events])
+            if event[-1] in modules_to_watch:
+                if all(modules[event[-1]].memory.values()):
+                    save[event[-1]].append(i)
+            pulse_counter.update([e for _, _, e, _, _ in new_events])
             queue.extend(new_events)
             queue = sorted(queue)
 
-    return pulse_counter
+    diff = {
+        k: [b - a for a, b in pairwise(v)][0]
+        for k, v in save.items()
+    }
+    return pulse_counter, lcm(*diff.values())
 
 
 data = load('input.txt')
-c = run(data, 1000)
-print(c[False] * c[True])
+# data = load('bug.txt')
+part1, part2 = run(data, 1000)
+print(part1[False] * part1[True])
+
+part1, part2 = run(data, 10000)
+print(part2)
