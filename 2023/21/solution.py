@@ -1,9 +1,8 @@
+from collections import Counter
 from typing import Literal, Optional
-from itertools import pairwise
 from tqdm import tqdm
 
 Pos = complex
-Moce = complex
 Elem = Literal['.', '#', 'S']
 Map = dict[Pos, Elem]
 _VALID_ELEM = ['.', 'S']
@@ -41,8 +40,9 @@ def start(map: Map) -> Pos:
 
 def run(map: Map, steps: int = 1) -> set[Pos]:
     current_pos: set[Pos] = {start(map)}
+    map_distance: dict[Pos, int] = {}
 
-    for _ in range(steps):
+    for i in range(steps):
         current_pos = {
             next_p
             for p in current_pos
@@ -50,6 +50,9 @@ def run(map: Map, steps: int = 1) -> set[Pos]:
                 map, p
             )
         }
+        for p in current_pos:
+            if p not in map_distance:
+                map_distance[p] = i
     return current_pos
 
 
@@ -69,7 +72,8 @@ def display(map: Map, positions: set[Pos]) -> None:
 map = load('input.txt')
 print(len(run(map, 64)))
 
-display(test_map2, run(test_map2, 100))
+# display(test_map2, run(test_map2, 10))
+
 
 def neighbours_with_exclusion(
     map: Map, pos: Pos,
@@ -101,7 +105,7 @@ def run2(map: Map, steps: int = 1) -> set[Pos]:
     height = max(p.imag for p in map.keys()) + 1
     dim = (width, height)
 
-    for _ in tqdm(range(steps + 1)):
+    for i in range(steps + 1):
         count_n, count_n_1 = count_n_1 + len(border_n), count_n
         border_n, border_n_1 = {
             next_p
@@ -110,5 +114,53 @@ def run2(map: Map, steps: int = 1) -> set[Pos]:
         }, border_n
     return count_n
 
+
 # print(run2(map, 26501365))
-print(run2(map, 10))
+print(run2(test_map, 500))
+
+for i in range(10):
+    print(run2(test_map, i))
+
+
+def neighbours_repeat(
+    map: Map, pos: Pos,
+    dim: Optional[tuple[int]]
+) -> set[Pos]:
+    shift_cross = [-1, 1, 1j, -1j]
+    pos_cross = [pos + shift for shift in shift_cross]
+
+    def pos_repeat(pos: Pos) -> Pos:
+        width, height = dim
+        return complex(pos.real % width, pos.imag % height)
+
+    return {
+        pos_repeat(p)
+        for p in pos_cross
+        if map[pos_repeat(p)] in _VALID_ELEM
+    }
+
+
+def run3(map: Map, steps: int = 1) -> Counter:
+    p_n = Counter([start(map)])
+
+    width = max(p.real for p in map.keys()) + 1
+    height = max(p.imag for p in map.keys()) + 1
+    dim = (width, height)
+
+    c_n = []
+    for _ in range(steps - 1):
+        p_n = sum(
+            (
+                Counter({
+                    next_pos: count
+                    for next_pos in neighbours_repeat(map, pos, dim)
+                })
+                for pos, count in p_n.items()
+            ),
+            Counter()
+        )
+        c_n.append(sum(p_n.values()))
+
+    return c_n[-1] - c_n[-2]
+
+print(run3(test_map, 10))
