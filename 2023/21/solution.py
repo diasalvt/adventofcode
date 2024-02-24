@@ -1,6 +1,6 @@
-from collections import Counter
-from typing import Literal, Optional
-from tqdm import tqdm
+from typing import Literal
+from functools import reduce
+from operator import add
 
 Pos = complex
 Elem = Literal['.', '#', 'S']
@@ -9,20 +9,20 @@ _VALID_ELEM = ['.', 'S']
 
 
 def load(filename: str) -> Map:
-    map = {}
+    puzzle_map = {}
     with open(filename) as f:
         for y, row in enumerate(f.read().splitlines()):
             for x, char in enumerate(row):
-                map[complex(x, y)] = char
-    return map
+                puzzle_map[complex(x, y)] = char
+    return puzzle_map
 
 
-test_map = load('test.txt')
-test_map2 = load('test2.txt')
+test_puzzle_map = load('test.txt')
+test_puzzle_map2 = load('test_simplified.txt')
 
 
 def neighbours(
-    map: Map, pos: Pos
+    puzzle_map: Map, pos: Pos
 ) -> list[Pos]:
     shift_cross = [-1, 1, 1j, -1j]
     pos_cross = [pos + shift for shift in shift_cross]
@@ -30,137 +30,168 @@ def neighbours(
     return [
         p
         for p in pos_cross
-        if (p in map.keys()) and (map[p] in _VALID_ELEM)
+        if (p in puzzle_map.keys()) and (puzzle_map[p] in _VALID_ELEM)
     ]
 
 
-def start(map: Map) -> Pos:
-    return next(filter(lambda x: x[1] == 'S', map.items()))[0]
+def start(puzzle_map: Map) -> Pos:
+    return next(filter(lambda x: x[1] == 'S', puzzle_map.items()))[0]
 
 
-def run(map: Map, steps: int = 1) -> set[Pos]:
-    current_pos: set[Pos] = {start(map)}
-    map_distance: dict[Pos, int] = {}
+def run(puzzle_map: Map, steps: int = 1) -> set[Pos]:
+    current_pos: set[Pos] = {start(puzzle_map)}
+    puzzle_map_distance: dict[Pos, int] = {}
 
     for i in range(steps):
         current_pos = {
             next_p
             for p in current_pos
             for next_p in neighbours(
-                map, p
+                puzzle_map, p
             )
         }
         for p in current_pos:
-            if p not in map_distance:
-                map_distance[p] = i
+            if p not in puzzle_map_distance:
+                puzzle_map_distance[p] = i
     return current_pos
 
 
-def display(map: Map, positions: set[Pos]) -> None:
-    width = int(max(p.real for p in map.keys()) + 1)
-    height = int(max(p.imag for p in map.keys()) + 1)
+def map_dim(puzzle_map: Map) -> tuple[int]:
+    width = int(max(p.real for p in puzzle_map.keys()) + 1)
+    height = int(max(p.imag for p in puzzle_map.keys()) + 1)
 
-    for j in range(height):
+    return (width, height)
+
+
+def display(puzzle_map: Map, positions: set[Pos]) -> None:
+    width, height = map_dim(puzzle_map)
+    shift_real = int(min(p.real for p in puzzle_map.keys()))
+    shift_imag = int(min(p.imag for p in puzzle_map.keys()))
+
+    def char(i: int, j: int) -> str:
+        if complex(i, j) not in positions:
+            return puzzle_map.get(complex(i, j), '.')
+        else:
+            return 'O'
+
+    for j in range(shift_imag, shift_imag + height):
         print(
             ''.join(
-                map[complex(i, j)] if complex(i, j) not in positions else 'O'
-                for i in range(width)
+                char(i, j)
+                for i in range(shift_real, shift_real + width)
             )
         )
 
 
-map = load('input.txt')
-print(len(run(map, 64)))
+puzzle_map = load('input.txt')
+print(len(run(puzzle_map, 64)))
 
-# display(test_map2, run(test_map2, 10))
+
+def pos_repeat(pos: Pos, dim: tuple[int]) -> Pos:
+    width, height = dim
+    return complex(pos.real % width, pos.imag % height)
 
 
 def neighbours_with_exclusion(
-    map: Map, pos: Pos,
+    puzzle_map: Map, pos: Pos,
     excluded: set[Pos],
-    dim: Optional[tuple[int]]
+    dim: tuple[int]
 ) -> set[Pos]:
     shift_cross = [-1, 1, 1j, -1j]
     pos_cross = [pos + shift for shift in shift_cross]
-
-    def pos_repeat(pos: Pos) -> Pos:
-        width, height = dim
-        return complex(pos.real % width, pos.imag % height)
 
     return {
         p
         for p in pos_cross
         if (
-            (map[pos_repeat(p)] in _VALID_ELEM) and
+            (puzzle_map[pos_repeat(p, dim)] in _VALID_ELEM) and
             (p not in excluded)
         )
     }
 
 
-def run2(map: Map, steps: int = 1) -> set[Pos]:
+def run2(puzzle_map: Map, steps: int = 1) -> set[Pos]:
     count_n_1, count_n = 0, 0
-    border_n_1, border_n = set(), {start(map)}
+    border_n_1, border_n = set(), {start(puzzle_map)}
 
-    width = max(p.real for p in map.keys()) + 1
-    height = max(p.imag for p in map.keys()) + 1
-    dim = (width, height)
+    dim = map_dim(puzzle_map)
 
     for i in range(steps + 1):
         count_n, count_n_1 = count_n_1 + len(border_n), count_n
         border_n, border_n_1 = {
             next_p
             for p in border_n
-            for next_p in neighbours_with_exclusion(map, p, border_n_1, dim)
+            for next_p in neighbours_with_exclusion(
+                puzzle_map, p, border_n_1, dim
+            )
         }, border_n
-    return count_n
+    return count_n, border_n
 
 
-# print(run2(map, 26501365))
-print(run2(test_map, 500))
-
-for i in range(10):
-    print(run2(test_map, i))
+# print(run2(puzzle_map, 26501365))
+# print(run2(test_puzzle_map2, 5000))
 
 
-def neighbours_repeat(
-    map: Map, pos: Pos,
-    dim: Optional[tuple[int]]
-) -> set[Pos]:
-    shift_cross = [-1, 1, 1j, -1j]
-    pos_cross = [pos + shift for shift in shift_cross]
-
-    def pos_repeat(pos: Pos) -> Pos:
-        width, height = dim
-        return complex(pos.real % width, pos.imag % height)
-
-    return {
-        pos_repeat(p)
-        for p in pos_cross
-        if map[pos_repeat(p)] in _VALID_ELEM
-    }
+def area(n: int) -> int:
+    return reduce(
+        add,
+        map(lambda x: 4 * x, range(1, n + 1)),
+        1
+    )
 
 
-def run3(map: Map, steps: int = 1) -> Counter:
-    p_n = Counter([start(map)])
+def covered(n: int) -> int:
+    c_n, c_n_1 = 4, 1
+    for i in range(2, n + 1):
+        c_n, c_n_1 = 4 * i + c_n_1, c_n
 
-    width = max(p.real for p in map.keys()) + 1
-    height = max(p.imag for p in map.keys()) + 1
-    dim = (width, height)
+    return c_n
 
-    c_n = []
-    for _ in range(steps - 1):
-        p_n = sum(
-            (
-                Counter({
-                    next_pos: count
-                    for next_pos in neighbours_repeat(map, pos, dim)
-                })
-                for pos, count in p_n.items()
-            ),
-            Counter()
-        )
-        c_n.append(sum(p_n.values()))
 
-    return c_n[-1] - c_n[-2]
+def grid(
+    puzzle_map: Map, repeat: int
+) -> tuple[Map, dict]:
+    repeated_map = {}
+    sub_grid: dict[tuple[int, int], set[Pos]] = {}
+    width, height = map_dim(puzzle_map)
 
-print(run3(test_map, 10))
+    def shift_map(puzzle_map: Map, shift: complex) -> Map:
+        return {
+            p + shift: elem if elem != 'S' else '.'
+            for p, elem in puzzle_map.items()
+        }
+
+    for x in range(repeat):
+        for y in range(repeat):
+            shifted_map = shift_map(
+                puzzle_map, x * width + y * height * 1j
+            )
+            sub_grid[(x, y)] = set(shifted_map)
+            repeated_map |= shifted_map
+
+    middle = width * (repeat // 2) + width // 2
+    repeated_map[middle + middle * 1j] = 'S'
+
+    return repeated_map, sub_grid
+
+
+big_test, _ = grid(puzzle_map, 7)
+display(big_test, run(big_test, 130 + 2 * 131 + 65))
+
+total_steps = 26501365
+
+
+def ultimate_pos(puzzle_map: Map, steps: int) -> tuple[int, int]:
+    width, height = map_dim(puzzle_map)
+    half_width = width // 2
+    if steps <= half_width:
+        return (steps + half_width, 0)
+
+    steps -= (half_width + 1)
+    return steps % width, steps // width
+
+
+print(ultimate_pos(puzzle_map, total_steps))
+print(f'pawn when even steps {len(run(puzzle_map, 100))}')
+print(f'pawn when odd steps {len(run(puzzle_map, 101))}')
+
