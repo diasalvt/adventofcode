@@ -112,12 +112,11 @@ def bfs(plan: Plan) -> int:
         if p.imag == max(p.imag for p in plan[0])
     )
 
-    states_to_explore = deque([(0, start, (-1, set()))])
+    states_to_explore = deque([(0, start, set())])
     max_length = 0
     i = 0
     while states_to_explore:
-        length, pos, (prev_pos, seen_nodes) = states_to_explore.popleft()
-        print(i := i + 1)
+        length, pos, seen = states_to_explore.popleft()
 
         # Test if we can beat the current max_length
         # if (length + len(plan[0] - seen)) > max_length:
@@ -125,13 +124,41 @@ def bfs(plan: Plan) -> int:
             if length > max_length:
                 max_length = length
         else:
-            seen = {prev_pos} + seen_nodes
             for n in neighbours(plan, pos) - seen:
-                if is_node(plan, pos):
-                    seen_nodes |= {prev_pos}
-                states_to_explore.append((length + 1, n, (prev_pos, seen_nodes)))
+                states_to_explore.append((length + 1, n, seen | {n}))
 
     return max_length
 
 
-print(bfs(test_plan))
+def bfs2(plan: Plan) -> int:
+    start = next(p for p in plan[0] if p.imag == 0)
+    end = next(
+        p
+        for p in plan[0]
+        if p.imag == max(p.imag for p in plan[0])
+    )
+
+    states_to_explore = deque([(0, start, (-1, set()))])
+    end_length = []
+    while states_to_explore:
+        length, pos, (prev_pos, seen_nodes) = states_to_explore.popleft()
+
+        if pos == end:
+            end_length.append(length)
+        else:
+            seen = {prev_pos} | seen_nodes
+            for n in neighbours(plan, pos) - seen:
+                if is_node(plan, n):
+                    next_seen_nodes = seen_nodes | {n}               
+                else:
+                    next_seen_nodes = seen_nodes
+                states_to_explore.append(
+                    (length + 1, n, (pos, next_seen_nodes))
+                )
+
+    return max(end_length)
+
+
+# print(bfs(test_plan))
+positions, _ = test_plan
+print(bfs2((positions, {})))
