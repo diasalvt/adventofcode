@@ -100,19 +100,23 @@ positions, forced_dirs = plan
 # print(longest_path((positions, {})))
 
 
+def is_node(plan: Plan, pos: Pos) -> bool:
+    return len(neighbours(plan, pos)) > 2
+
+
 def bfs(plan: Plan) -> int:
     start = next(p for p in plan[0] if p.imag == 0)
     end = next(
-        p 
+        p
         for p in plan[0]
         if p.imag == max(p.imag for p in plan[0])
     )
 
-    states_to_explore = deque([(0, start, set())])
+    states_to_explore = deque([(0, start, (-1, set()))])
     max_length = 0
     i = 0
-    while states_to_explore :
-        length, pos, seen = states_to_explore.popleft()
+    while states_to_explore:
+        length, pos, (prev_pos, seen_nodes) = states_to_explore.popleft()
         print(i := i + 1)
 
         # Test if we can beat the current max_length
@@ -121,8 +125,11 @@ def bfs(plan: Plan) -> int:
             if length > max_length:
                 max_length = length
         else:
+            seen = {prev_pos} + seen_nodes
             for n in neighbours(plan, pos) - seen:
-                states_to_explore.append((length + 1, n, seen | {n}))
+                if is_node(plan, pos):
+                    seen_nodes |= {prev_pos}
+                states_to_explore.append((length + 1, n, (prev_pos, seen_nodes)))
 
     return max_length
 
