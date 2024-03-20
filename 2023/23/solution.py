@@ -107,13 +107,13 @@ def is_node(plan: Plan, pos: Pos) -> bool:
 Graph = dict[Pos, dict[Pos, int]]
 
 
-def bfs_next_node(plan: Plan, start: Pos, special_nodes: set[Pos]) -> int:
+def dfs_next_node(plan: Plan, start: Pos, special_nodes: set[Pos]) -> int:
 
     states_to_explore = deque([(0, start, set())])
     nodes_distance = defaultdict(int)
 
     while states_to_explore:
-        length, pos, seen = states_to_explore.popleft()
+        length, pos, seen = states_to_explore.pop()
 
         if pos != start and pos in special_nodes:
             if length > nodes_distance[pos]:
@@ -139,7 +139,7 @@ def build_graph(plan: Plan) -> Graph:
     )
 
     return {
-        n: bfs_next_node(plan, n, nodes)
+        n: dfs_next_node(plan, n, nodes)
         for n in nodes
     }
 
@@ -149,7 +149,7 @@ def longest_path_graph(g: Graph, start: Pos, end: Pos):
 
     max_length = 0
     while states_to_explore:
-        length, pos, seen = states_to_explore.popleft()
+        length, pos, seen = states_to_explore.pop()
 
         if pos == end:
             if length > max_length:
