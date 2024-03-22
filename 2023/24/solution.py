@@ -19,10 +19,9 @@ def intersection(
     path_a: Path, path_b: Path
 ) -> Union[None, 'all', Vec]:
     (p_a, v_a), (p_b, v_b) = path_a, path_b
-    V = np.array([v_a, v_b]).transpose()
+    V = np.array([v_a, [-v for v in v_b]]).transpose()
     P = np.subtract(np.array([p_b]), np.array([p_a])).transpose()
 
-    print(V, P)
     try:
         return np.linalg.solve(V, P)
     except np.linalg.LinAlgError:
@@ -36,7 +35,9 @@ _LOWER = 200000000000000
 _HIGHER = 400000000000000
 
 
-def is_valid(path_a, path_b, inter_res) -> bool:
+def is_valid(
+    path_a: Path, path_b: Path, inter_res: np.array, low_high: tuple[int, int]
+) -> bool:
     match inter_res:
         case 'all':
             return True
@@ -46,10 +47,12 @@ def is_valid(path_a, path_b, inter_res) -> bool:
             pos = tuple(
                 inter_res[0, 0] * v_i + p_i for p_i, v_i in zip(*path_a)
             )
-            print(pos)
-            return all(
-                _LOWER <= p_i <= _HIGHER
-                for p_i in pos
+            return (
+                np.all(inter_res > 0)
+                and all(
+                    low_high[0] <= p_i <= low_high[1]
+                    for p_i in pos
+                )
             )
 
 
@@ -58,4 +61,6 @@ def dim2d(data: list[Path]) -> list[Path]:
 
 
 test = dim2d(load('test.txt'))
-print(is_valid(test[0], test[1], intersection(test[0], test[1])))
+
+for t in test[1:]:
+    print(is_valid(test[0], t, intersection(test[0], t), (7, 27)))
