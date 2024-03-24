@@ -1,6 +1,9 @@
 import re
 import numpy as np
 from typing import Union
+from itertools import combinations, chain
+from sympy import Eq, Symbol, solve
+
 
 Vec = tuple[float]
 Path = tuple[Vec, Vec]
@@ -36,14 +39,12 @@ _HIGHER = 400000000000000
 
 
 def is_valid(
-    path_a: Path, path_b: Path, inter_res: np.array, low_high: tuple[int, int]
+    path_a: Path, path_b: Path, low_high: tuple[int, int]
 ) -> bool:
+    inter_res = intersection(path_a, path_b)
+
     match inter_res:
-        case 'all':
-            return True
-        case None:
-            return False
-        case _:
+        case np.ndarray():
             pos = tuple(
                 inter_res[0, 0] * v_i + p_i for p_i, v_i in zip(*path_a)
             )
@@ -54,6 +55,10 @@ def is_valid(
                     for p_i in pos
                 )
             )
+        case 'all':
+            return True
+        case None:
+            return False
 
 
 def dim2d(data: list[Path]) -> list[Path]:
@@ -61,6 +66,38 @@ def dim2d(data: list[Path]) -> list[Path]:
 
 
 test = dim2d(load('test.txt'))
+paths = dim2d(load('input.txt'))
 
-for t in test[1:]:
-    print(is_valid(test[0], t, intersection(test[0], t), (7, 27)))
+print(
+    sum(is_valid(*pair, (_LOWER, _HIGHER)) for pair in combinations(paths, 2))
+)
+
+
+def generate_equation(
+    path: Path, p_symb: tuple[Symbol], v_symb: tuple[Symbol],
+    i: int
+) -> tuple[Symbol, list[Eq]]:
+    position, vel = path
+    t_i = Symbol(f't_{i}')
+    return t_i, [
+        Eq(p_i - p_symb_i + t_i * (v_i - v_symb_i), 0)
+        for p_i, v_i, p_symb_i, v_symb_i in zip(position, vel, p_symb, v_symb)
+    ]
+
+
+def equations(data: list[Path]) -> tuple[list[Symbol], list[Eq]]:
+    p_symb = [Symbol(f'p_{s}') for s in ['x', 'y', 'z']]
+    v_symb = [Symbol(f'v_{s}') for s in ['x', 'y', 'z']]
+
+    t_symb, eqs = zip(*(
+        generate_equation(path, p_symb, v_symb, i)
+        for i, path in enumerate(data)
+    ))
+    eqs = list(chain.from_iterable(eqs))
+    t_symb = list(t_symb)
+
+    return p_symb + v_symb + t_symb, eqs
+
+
+symbols, eqs = equations(load('input.txt')[:3])
+print(sum(solve(eqs, symbols)[0][:3]))
