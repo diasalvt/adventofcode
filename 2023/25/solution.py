@@ -95,5 +95,5 @@ graph_sol = cut_graph(graph_sol, edge2)
 graph_sol = cut_graph(graph_sol, edge3)
 
 print(
-    count_connected(graph_sol, 'zsp') * count_connected(graph_sol, 'fhv')
+    count_connected(graph_sol, edge1[0]) * count_connected(graph_sol, edge1[1])
 )
