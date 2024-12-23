@@ -54,26 +54,17 @@ def is_valid_except_one(rep: Report) -> bool:
 
     def _increasing(rep: Report, can_skip: int = 1) -> bool:
         rep_with_sentinels = list(chain([None], rep, [None]))
-        window = sliding_window(rep_with_sentinels, 4)
-        is_valid_interval = sliding_window(
-            starmap(_is_valid, pairwise(rep_with_sentinels)),
-            3
-        )
 
-        for w, is_valid_increase in zip(window, is_valid_interval):
-            a1, a2, a3, a4 = w
-
-            match is_valid_increase:
-                case True, False, False:
-                    if not _is_valid(a2, a4):
+        for w in sliding_window(rep_with_sentinels, 4):
+            match tuple(starmap(_is_valid, pairwise(w))):
+                case _, False, False:
+                    if not _is_valid(w[1], w[3]):
                         return False
                     can_skip -= 1
                 case True, False, True:
-                    if not (_is_valid(a1, a3) or _is_valid(a2, a4)):
+                    if not (_is_valid(w[0], w[2]) or _is_valid(w[1], w[3])):
                         return False
                     can_skip -= 1
-                case False, False, False:
-                    return False
             if can_skip < 0:
                 return False
         return True
