@@ -61,4 +61,5 @@ def is_valid_except_one(rep: Report) -> bool:
 
 This solution implements an algorithm similar to how a human would solve the challenge:
 Find a spot with error, see if there is a possible fix. If yes continue otherwise return False.
-
+An error is about two consecutive points `(p1, p2)`. Modifying any of this two points will have an impact on
+their neighbours. This is why we are scanning `p0 (p1 p2) p3` in this algorithm.
