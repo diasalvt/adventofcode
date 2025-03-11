@@ -1,5 +1,6 @@
-from itertools import chain, islice, count, starmap, repeat
-from typing import Iterable, Iterator, Optional
+from itertools import chain, islice, count, accumulate
+from typing import Iterable, Iterator
+import re
 
 
 def load(filename: str) -> tuple[list[int], list[int]]:
@@ -8,7 +9,7 @@ def load(filename: str) -> tuple[list[int], list[int]]:
     return disk[::2], disk[1::2]
 
 
-disk = load('test2.txt')
+disk = load('input.txt')
 
 
 def interleave(*iterables: Iterable) -> Iterator:
@@ -43,90 +44,45 @@ print(
     )
 )
 
-mem = (list(enumerate(disk[0])), disk[1] + [0])
 
-FileSizes = list[tuple[int, int]]
-FreeSpaces = list[int]  # Indicate the number of free spaces also at the end
-Memory = tuple[FileSizes, FreeSpaces]
-
-
-def combine_mems(*mems: Memory) -> Memory:
-    return tuple(
-        map(lambda x: list(chain.from_iterable(x)), zip(*mems))
+def disk_str(flat_disk: list[int]) -> str:
+    return ''.join(
+        size * (' ' if i % 2 else 'x') for i, size in enumerate(flat_disk)
     )
 
 
-def mem_pop(mem: Memory) -> tuple[Memory, tuple[int, int]]:
-    file_sizes, free_spaces = mem
-    return (
-        file_sizes[:-1],
-        free_spaces[:-2] + [free_spaces[-2] + free_spaces[-1] + file_sizes[-1][1]]
-    ), file_sizes[-1]
-
-
-def mem_append(mem: Memory, file_size) -> Optional[Memory]:
-    file_sizes, free_spaces = mem
-    file_id, size = file_size
-    if free_spaces[-1] >= size:
+def find_spot(s: str, file_pos, file_size) -> int:
+    match = re.search(' ' * file_size, s)
+    if match and (match.start() < file_pos):
+        start = match.start()
         return (
-            file_sizes + [file_size],
-            free_spaces[:-1] + [0, free_spaces[-1] - size]
+            (
+                s[:start] +
+                'x' * file_size +
+                s[start + file_size:file_pos] +
+                ' ' * file_size +
+                s[file_pos + file_size:]
+            ),
+            start
         )
     else:
-        return None
+        return s, file_pos
 
 
-def sub_mem(mem: Memory, start: int, stop: int) -> Memory:
-    file_sizes, free_spaces = mem
-    return (
-        file_sizes[start:stop],
-        free_spaces[start:stop]
-    )
+def play(disk: tuple[list[int], list[int]]) -> int:
+    flat_disk = list(interleave(disk[0], disk[1]))
+    positions = list(accumulate([0] + flat_disk))
+    files_pos = positions[::2]
+    files_size = disk[0]
+    files = list(enumerate(zip(files_pos, files_size)))
+
+    mem = disk_str(flat_disk)
+    score = 0
+    for id, (pos, size) in reversed(files):
+        mem, pos = find_spot(mem, pos, size)
+        score += sum(p * id for p in range(pos, pos + size))
+
+    return score
 
 
-def sub_mems(mem: Memory) -> Iterator[tuple[Memory]]:
-    for i in range(1, len(mem[0])):
-        yield sub_mem(mem, 0, i), sub_mem(mem, i, None)
-
-
-def mem_insert_left_most(mem: Memory, file_size) -> Optional[Memory]:
-    for mem_before, mem_after in sub_mems(mem):
-        if new_mem := mem_append(mem_before, file_size):
-            return combine_mems(new_mem, mem_after)
-    return None
-
-
-def move(mem: Memory, file_id) -> Optional[Memory]:
-    file_id_pos = [i for i, (id, _) in enumerate(mem[0]) if id == file_id][0]
-    mem_before, mem_after = (
-        sub_mem(mem, 0, file_id_pos + 1),
-        sub_mem(mem, file_id_pos + 1, None)
-    )
-    mem_before, file_size = mem_pop(mem_before)
-    if new_mem := mem_insert_left_most(mem_before, file_size):
-        return combine_mems(new_mem, mem_after)
-    else:
-        return mem
-
-
-def score_mem(mem: Memory) -> int:
-    file_sizes, free_spaces = mem
-    flatten_mem = chain.from_iterable(
-        interleave(
-            starmap(repeat, file_sizes), map(lambda x: ['.'] * x, free_spaces)
-        )
-    )
-    return sum(
-        i * v
-        for i, v in enumerate(flatten_mem)
-        if v != '.'
-    )
-
-
-def play(mem: Memory) -> int:
-    for i in reversed(range(1, len(mem[0]))):
-        mem = move(mem, i)
-    return mem
-
-
-print(score_mem(play(mem)))
+print(play(disk))
