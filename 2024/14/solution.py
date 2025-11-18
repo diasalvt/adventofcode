@@ -1,6 +1,7 @@
 import re
-from itertools import product
+from itertools import product, islice
 from functools import reduce
+from typing import Iterable, Generator
 from collections import Counter
 
 Pos = Vel = complex
@@ -20,7 +21,11 @@ def load(filename: str) -> list[Robot]:
 
 
 robots = load('input.txt')
-terrain: Terrain = (101, 103)
+terrain = (
+    1 + max(int(p.real) for p, v in robots),
+    1 + max(int(p.imag) for p, v in robots)
+)
+
 quadrants: tuple[tuple[range]] = tuple(product(
     (
         range(terrain[0] // 2),
@@ -40,16 +45,22 @@ def update_pos(pos: Pos, v: Vel, terrain: Terrain = terrain) -> Pos:
     return (new_pos.real % t_x) + 1j * (new_pos.imag % t_y)
 
 
+def update_robots(
+    robots: list[Robot], steps: int, terrain: Terrain
+) -> list[Pos]:
+    return [update_pos(p, steps * v, terrain) for p, v in robots]
+
+
 def is_in(pos: Pos, quadrant: tuple[range, range]) -> bool:
     p_x, p_y = pos.real, pos.imag
     return (p_x in quadrant[0]) and (p_y in quadrant[1])
 
 
-def display(robots: list[Pos], terrain: Terrain) -> None:
-    robots_set = set(robots)
+def display(positions: list[Pos], terrain: Terrain) -> None:
+    positions_set = set(positions)
     for y in range(terrain[1]):
         row = ''.join(
-            '*' if (x + 1j * y) in robots_set else '_'
+            '*' if (x + 1j * y) in positions_set else '_'
             for x in range(terrain[0])
         )
         print(row)
@@ -65,15 +76,48 @@ result = reduce(
 
 print(result)
 
-for i in range(100_000, 500_000):
-    result_quadrants = [
-        sum(is_in(update_pos(p, i * v), q) for p, v in robots)
-        for q in quadrants
-    ]
-    if (
-        (result_quadrants[0] == result_quadrants[1]) and
-        (result_quadrants[2] == result_quadrants[3])
-    ):
-        print(i)
-        display([update_pos(p, i * v, terrain) for p, v in robots], terrain)
-        print('\n\n')
+
+"""
+    First idea was to look at the 'entropy' of the image.
+    If the image is random, we expect the robots to no be concentrated
+    anywhere.
+    But this filter was not specific enough.
+    Looking at the final picture, it could work if we look at the last
+    quartile.
+"""
+# def entropy(positions: list[Pos], terrain: Terrain, zoom: int = 20) -> float:
+#     t_x, t_y = terrain
+
+#     c = Counter(p.real // zoom + 1j * (p.imag // zoom) for p in positions)
+#     return sum(c.values()) / len(c.values())
+
+
+def count_symmetric(positions: list[Pos], terrain: Terrain) -> bool:
+    t_x, _ = terrain
+    middle = t_x // 2
+
+    counter_positions = Counter(positions)
+    return sum(
+        (
+            counter_positions[p] ==
+            counter_positions[
+                p +
+                2 * (p.real - middle if p.real < middle else middle - p.real)
+            ]
+        )
+        for p in positions
+    )
+
+
+def scan(robots: list[Robot], terrain: Terrain) -> int:
+    res = []
+    t_x, t_y = terrain
+    for i in range(t_x * t_y):
+        updated_pos = update_robots(robots, i, terrain)
+        res.append(count_symmetric(updated_pos, terrain))
+
+    return res
+
+
+result = max(enumerate(scan(robots, terrain)), key=lambda x: x[1])
+print(result)
