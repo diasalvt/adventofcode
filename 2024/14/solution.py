@@ -1,7 +1,6 @@
 import re
-from itertools import product, islice
+from itertools import product
 from functools import reduce
-from typing import Iterable, Generator
 from collections import Counter
 
 Pos = Vel = complex
