@@ -97,19 +97,39 @@ def equal_program(computer: Computer, program: Program) -> bool:
 
 
 val_to_bits = defaultdict(list)
-res = []
-for i in range(1_000):
+for i in range(2 ** 11):
     c = Computer({4: i, 5: 0, 6: 0})
     val = next(c.run(program))
-    if val not in val_to_bits:
-        val_to_bits[i].append(val)
-        res.append(val)
+    val_to_bits[val].append(i)
 
-print(res)
 
-result = 0
-for i, v in enumerate(program):
-    result += v * 2 ** (3 * i)
-print(result)
+def possible_10_bits(
+    program: list[int],
+    val_to_bits: dict[int, int]
+) -> Iterable[tuple[int]]:
 
-print(list(Computer({4: 4 + 8 * 20, 5: 0, 6: 0}).run(program)))
+    if len(program) == 1:
+        yield from map(lambda x: (x,), sorted(val_to_bits[program[0]]))
+        return
+
+    *program, output = program
+
+    for v in sorted(val_to_bits[output]):
+        for bits in possible_10_bits(program, val_to_bits):
+            msb, *lsb = bits
+            if (msb // 2**3) == (v % 2**8):
+                yield (v, msb, *lsb)
+
+
+print(next(possible_10_bits(program, val_to_bits)))
+
+print(
+    list(
+        Computer({
+            4: 703,
+            5: 0,
+            6: 0
+        }).
+        run(program)
+    )
+)
