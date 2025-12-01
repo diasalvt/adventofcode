@@ -102,31 +102,49 @@ for i in range(2 ** 11):
     val = next(c.run(program))
     val_to_bits[val].append(i)
 
+d_val_to_bits = {}
+for val, l_bits in val_to_bits.items():
+    for bits in l_bits:
+        top_7_bits = bits // 2**3
+        if top_7_bits not in d_val_to_bits:
+            d_val_to_bits[top_7_bits] = defaultdict(list)
+        d_val_to_bits[top_7_bits][val].append(bits)
+
+for top_7_bits, sub_d in d_val_to_bits.items():
+    for val, l_bits in sub_d.items():
+        d_val_to_bits[top_7_bits][val] = sorted(l_bits)
+
 
 def possible_10_bits(
     program: list[int],
-    val_to_bits: dict[int, int]
+    val_to_bits: dict[int, int],
 ) -> Iterable[tuple[int]]:
 
     if len(program) == 1:
-        yield from map(lambda x: (x,), sorted(val_to_bits[program[0]]))
+        yield from map(lambda x: (x,), val_to_bits[program[0]])
         return
 
     *program, output = program
 
-    for v in sorted(val_to_bits[output]):
-        for bits in possible_10_bits(program, val_to_bits):
+    for v in val_to_bits[output]:
+        last_7_bits = (v % 2**8)
+        for bits in possible_10_bits(program, d_val_to_bits[last_7_bits]):
             msb, *lsb = bits
-            if (msb // 2**3) == (v % 2**8):
-                yield (v, msb, *lsb)
+            yield (v, msb, *lsb)
 
 
-print(next(possible_10_bits(program, val_to_bits)))
+best_bits = next(possible_10_bits(program, val_to_bits))
+
+result = sum(
+    (bits % 8) * 2**(3*i)
+    for i, bits in enumerate(reversed(best_bits))
+)
+print(result)
 
 print(
     list(
         Computer({
-            4: 703,
+            4: result,
             5: 0,
             6: 0
         }).
