@@ -1,13 +1,12 @@
-from itertools import accumulate
-from operator import add
+from collections import Counter
 
 
 def load(filename: str) -> list[list[int]]:
     with open(filename) as f:
         lines = f.read().splitlines()
     return [
-        [i for i, c in enumerate(l) if c == '^']
-        for l in lines[2::2]
+        [i for i, c in enumerate(line) if c == '^']
+        for line in lines[2::2]
     ]
 
 
@@ -25,3 +24,16 @@ for splitters in d[1:]:
     } | {b for b in beams if b not in splitters}
 
 print(result)
+
+beams_count = Counter([d[0][0] - 1, d[0][0] + 1])
+for splitters in d[1:]:
+    new_beams_count = Counter()
+    for beam, count in beams_count.items():
+        if (count > 0) and (beam in splitters):
+            for shift in (-1, 1):
+                new_beams_count[beam + shift] += beams_count[beam]
+        else:
+            new_beams_count[beam] += beams_count[beam]
+    beams_count = new_beams_count
+
+print(sum(beams_count.values()))
