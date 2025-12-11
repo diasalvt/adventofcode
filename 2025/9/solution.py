@@ -1,4 +1,6 @@
-from itertools import pairwise
+from itertools import pairwise, chain
+import matplotlib.pyplot as plt
+
 Pos = tuple[int, ...]
 
 
@@ -18,69 +20,74 @@ result = max(
 
 print(result)
 
-Segment = tuple[Pos, ...]
-Segments = list[Segment]
+
+def gen_line(p1: Pos, p2: Pos) -> list[Pos]:
+    if p1[0] == p2[0]:
+        if p2[1] < p1[1]:
+            return [(p1[0], y) for y in reversed(range(p2[1] + 1, p1[1] + 1))]
+        else:
+            return [(p1[0], y) for y in range(p1[1], p2[1])]
+    else:
+        if p2[0] < p1[0]:
+            return [(x, p1[1]) for x in reversed(range(p2[0] + 1, p1[0] + 1))]
+        else:
+            return [(x, p1[1]) for x in range(p1[0], p2[0])]
 
 
-def is_horizontal(s: Segment) -> bool:
-    return s[0][1] == s[1][1]
-
-
-def intersect(s1: Segment, s2: Segment) -> bool:
-    # sort
-    s1 = tuple(sorted(s1))
-    s2 = tuple(sorted(s2))
-
-    # same direction
-    if not (is_horizontal(s1) ^ is_horizontal(s2)):
-        return False
-
-    h_p1, h_p2 = s1 if is_horizontal(s1) else s2
-    v_p1, v_p2 = s1 if (h_p1, h_p2) == s2 else s2
-
+def rectangle(p1: Pos, p2: Pos) -> list[Pos]:
+    p1_x, p1_y = p1
+    p2_x, p2_y = p2
+    corner_1 = p1_x, p2_y
+    corner_2 = p2_x, p1_y
     return (
-        (h_p1[1] in range(v_p1[1] + 1, v_p2[1])) and
-        (v_p1[0] in range(h_p1[0] + 1, h_p2[0]))
+        gen_line(p1, corner_1) + gen_line(corner_1, p2) +
+        gen_line(p2, corner_2) + gen_line(corner_2, p1)
     )
-
-
-def find_intersections(s: Segment, segments: Segments) -> set[Segment]:
-    return {
-        segment
-        for segment in segments
-        if intersect(s, segment)
-    }
-
-
-def points_below(p: Pos, positions: list[Pos]) -> set[Pos]:
-    return {
-        other_p
-        for other_p in positions
-        if (p[0] == other_p[0]) and (p[1] < other_p[1])
-    }
-
-
-def rectangle_is_interior(p1: Pos, p2: Pos, segments: Segments):
-    corners = [
-        p1, (p1[0], p2[1]),
-        p2, (p2[0], p1[1])
-    ]
-
-    all_corners_inside = all(
-        (p in positions) or ((len(points_below(p, positions)) % 2) == 1)
-        for p in corners
-    )
-    sides = list(pairwise(corners + [corners[0]]))
-    all_sides_inside = all(
-        len(find_intersections(s, segments)) < 1
-        for s in sides
-    )
-
-    return all_corners_inside and all_sides_inside
 
 
 segments = list(pairwise(positions + [positions[0]]))
+border = list(
+    chain.from_iterable(
+        gen_line(*s)
+        for s in segments
+    )
+)
+border_with_direction = {
+    complex(*p): complex(*next_p) - complex(*p)
+    for p, next_p in zip(border, border[1:] + [border[0]])
+}
 
-result = max(
-    (abs(p1[0] - p2[0]) + 1) * (abs(p1[1] - p2[1]) + 1)
-    for p1 in positions for p2 in positions if (p1 < p2) and rectangle_is_interior(p1, p2, segments) )
+
+def rectangle_is_interior(p1: Pos, p2: Pos, border_with_direction):
+    rec = [complex(*p) for p in rectangle(p1, p2)]
+    directions = [
+        next_p - p
+        for p, next_p in zip(rec, rec[1:] + [rec[0]])
+    ]
+
+    terrain_rectangle = [
+        (border_with_direction[p], d) if p in border_with_direction else (None, d)
+        for p, d in zip(rec, directions)
+    ]
+
+    block = [
+        (((dir / prev_dir) != 1j) and ((terrain_dir / prev_dir) == 1j))
+        for (_, prev_dir), (terrain_dir, dir) in pairwise(terrain_rectangle)
+        if terrain_dir is not None
+    ]
+    print(terrain_rectangle)
+    print(block)
+    return not any(block)
+
+
+for p1, p2 in segments:
+    x_coord, y_coord = zip(p1, p2)
+    plt.plot(x_coord, y_coord)
+
+plt.show()
+
+# result = max(
+#     ((abs(p1[0] - p2[0]) + 1) * (abs(p1[1] - p2[1]) + 1), p1, p2)
+#     for p1 in positions for p2 in positions
+#     if (p1 < p2) and rectangle_is_interior(p1, p2, border_with_direction)
+# )
