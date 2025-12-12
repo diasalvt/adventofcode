@@ -1,4 +1,5 @@
-from itertools import pairwise, chain
+from itertools import pairwise, chain, starmap, tee, islice, takewhile, count
+from typing import Iterable
 import matplotlib.pyplot as plt
 
 Pos = tuple[int, ...]
@@ -9,7 +10,7 @@ def load(filename: str) -> list[Pos]:
         return [tuple(map(int, r.split(','))) for r in f]
 
 
-positions = load('test.txt')
+positions = load('input.txt')
 
 result = max(
     (abs(p1_x - p2_x) + 1) * (abs(p1_y - p2_y) + 1)
@@ -39,45 +40,73 @@ def rectangle(p1: Pos, p2: Pos) -> list[Pos]:
     p2_x, p2_y = p2
     corner_1 = p1_x, p2_y
     corner_2 = p2_x, p1_y
-    return (
+
+    return set(
         gen_line(p1, corner_1) + gen_line(corner_1, p2) +
         gen_line(p2, corner_2) + gen_line(corner_2, p1)
     )
 
 
+Segments = list[tuple[Pos, Pos]]
 segments = list(pairwise(positions + [positions[0]]))
-border = list(
-    chain.from_iterable(
-        gen_line(*s)
-        for s in segments
+
+
+def nwise(it: Iterable, n: int = 3) -> Iterable:
+    return zip(*(islice(it, i, None) for i, it in enumerate(tee(it, n))))
+
+
+def build_border(segments: Segments, exterior: complex = -1) -> list[Pos]:
+    border = list(
+        starmap(
+            complex,
+            chain.from_iterable(
+                gen_line(*s)
+                for s in segments
+            )
+        )
     )
-)
-border_with_direction = {
-    complex(*p): complex(*next_p) - complex(*p)
-    for p, next_p in zip(border, border[1:] + [border[0]])
-}
+
+    external_border = [border[0] + exterior]
+    for p1, p2, p3 in nwise(border + [border[0]]):
+        dir_1, dir_2 = (p2 - p1), (p3 - p2)
+        turn = dir_2 / dir_1
+        if turn == 1:
+            external_border += [external_border[-1] + dir_1]
+        elif turn == -exterior:
+            external_border += [
+                external_border[-1] + dir_1,
+                external_border[-1] + 2 * dir_1,
+                external_border[-1] + 2 * dir_1 + dir_2,
+            ]
+
+    return border, set(external_border)
 
 
-def rectangle_is_interior(p1: Pos, p2: Pos, border_with_direction):
-    rec = [complex(*p) for p in rectangle(p1, p2)]
-    directions = [
-        next_p - p
-        for p, next_p in zip(rec, rec[1:] + [rec[0]])
-    ]
+def rectangle_is_interior(
+    p1: Pos, p2: Pos, external_border: set[Pos]
+):
+    return not any(
+        complex(*p) in external_border
+        for p in rectangle(p1, p2)
+    )
 
-    terrain_rectangle = [
-        (border_with_direction[p], d) if p in border_with_direction else (None, d)
-        for p, d in zip(rec, directions)
-    ]
 
-    block = [
-        (((dir / prev_dir) != 1j) and ((terrain_dir / prev_dir) == 1j))
-        for (_, prev_dir), (terrain_dir, dir) in pairwise(terrain_rectangle)
-        if terrain_dir is not None
-    ]
-    print(terrain_rectangle)
-    print(block)
-    return not any(block)
+def point_range(
+    p: Pos, border: list[Pos], external_border: set[Pos]
+) -> tuple:
+    max_up, max_down, max_left, max_right = (
+        list(takewhile(
+            lambda p: p not in external_border,
+            (complex(*p) + i * d for i in count())
+        ))
+        for d in [1j, -1j, -1, 1]
+    )
+    return (
+        min(e.imag for e in max_left),
+        max(e.real for e in max_right),
+        min(e.imag for e in max_down),
+        max(e.imag for e in max_up),
+    )
 
 
 for p1, p2 in segments:
@@ -86,8 +115,16 @@ for p1, p2 in segments:
 
 plt.show()
 
-# result = max(
-#     ((abs(p1[0] - p2[0]) + 1) * (abs(p1[1] - p2[1]) + 1), p1, p2)
-#     for p1 in positions for p2 in positions
-#     if (p1 < p2) and rectangle_is_interior(p1, p2, border_with_direction)
-# )
+border, external_border = build_border(segments, -1)
+
+result = 0
+for p1 in positions:
+    min_x, max_x, min_y, max_y = point_range(p1, border, external_border)
+    for p2 in positions:
+        if (min_x <= p2[0] <= max_x) and (min_y <= p2[1] <= max_y):
+            area = (abs(p1[0] - p2[0]) + 1) * (abs(p1[1] - p2[1]) + 1)
+            if (p1 < p2) and (area > result):
+                if rectangle_is_interior(p1, p2, external_border):
+                    result = max(result, area)
+
+print(result)
