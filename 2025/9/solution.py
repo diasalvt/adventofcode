@@ -1,6 +1,8 @@
-from itertools import pairwise, chain, starmap, tee, islice, takewhile, count
+from itertools import pairwise, chain, starmap, tee, islice
 from typing import Iterable
-import matplotlib.pyplot as plt
+from collections import defaultdict
+from bisect import bisect_left, bisect_right
+import tqdm
 
 Pos = tuple[int, ...]
 
@@ -35,17 +37,14 @@ def gen_line(p1: Pos, p2: Pos) -> list[Pos]:
             return [(x, p1[1]) for x in range(p1[0], p2[0])]
 
 
-def rectangle(p1: Pos, p2: Pos) -> list[Pos]:
-    p1_x, p1_y = p1
-    p2_x, p2_y = p2
-    corner_1 = p1_x, p2_y
-    corner_2 = p2_x, p1_y
+def rectangle_segments(p1: Pos, p2: Pos) -> tuple:
+    min_x, max_x = min(p1[0], p2[0]), max(p1[0], p2[0])
+    min_y, max_y = min(p1[1], p2[1]), max(p1[1], p2[1])
 
-    return set(
-        gen_line(p1, corner_1) + gen_line(corner_1, p2) +
-        gen_line(p2, corner_2) + gen_line(corner_2, p1)
+    return (
+        (min_x, max_x, range(min_y, max_y + 1)),
+        (min_y, max_y, range(min_x, max_x + 1))
     )
-
 
 Segments = list[tuple[Pos, Pos]]
 segments = list(pairwise(positions + [positions[0]]))
@@ -55,7 +54,7 @@ def nwise(it: Iterable, n: int = 3) -> Iterable:
     return zip(*(islice(it, i, None) for i, it in enumerate(tee(it, n))))
 
 
-def build_border(segments: Segments, exterior: complex = -1) -> list[Pos]:
+def build_border(segments: Segments, exterior: complex = -1) -> tuple:
     border = list(
         starmap(
             complex,
@@ -67,64 +66,100 @@ def build_border(segments: Segments, exterior: complex = -1) -> list[Pos]:
     )
 
     external_border = [border[0] + exterior]
-    for p1, p2, p3 in nwise(border + [border[0]]):
-        dir_1, dir_2 = (p2 - p1), (p3 - p2)
-        turn = dir_2 / dir_1
-        if turn == 1:
-            external_border += [external_border[-1] + dir_1]
-        elif turn == -exterior:
-            external_border += [
-                external_border[-1] + dir_1,
-                external_border[-1] + 2 * dir_1,
-                external_border[-1] + 2 * dir_1 + dir_2,
-            ]
+    skip = False
 
-    return border, set(external_border)
+    for p1, p2, p3 in nwise(border + border[:2]):
+        if not skip:
+            exterior = external_border[-1] - p1
+            dir_1, dir_2 = (p2 - p1), (p3 - p2)
+            turn = dir_2 / dir_1
+            if turn == 1:
+                external_border += [external_border[-1] + dir_1]
+            elif dir_2 == -exterior:
+                external_border += [
+                    external_border[-1] + dir_1,
+                    external_border[-1] + 2 * dir_1,
+                    external_border[-1] + 2 * dir_1 + dir_2,
+                ]
+            else:
+                skip = True
+        else:
+            skip = False
+
+    return border, external_border
+
+
+Scanner = tuple[dict, ...]
+
+
+def build_scanner(external_border: list[complex]) -> Scanner:
+    x_y = defaultdict(set)
+    y_x = defaultdict(set)
+    for p in external_border:
+        p_x, p_y = p.real, p.imag
+        x_y[p_x] |= {p_y}
+        y_x[p_y] |= {p_x}
+
+    def to_sorted(d: defaultdict) -> defaultdict:
+        return defaultdict(list, {
+            k: sorted(v)
+            for k, v in d.items()
+        })
+    return (to_sorted(x_y), to_sorted(y_x))
 
 
 def rectangle_is_interior(
-    p1: Pos, p2: Pos, external_border: set[Pos]
+    p1: Pos, p2: Pos, scanner: Scanner
 ):
-    return not any(
-        complex(*p) in external_border
-        for p in rectangle(p1, p2)
+    x_y, y_x = scanner
+    (x1, x2, r_y), (y1, y2, r_x) = rectangle_segments(p1, p2)
+    return not(
+        values_in_range(x_y[x1], r_y) or
+        values_in_range(x_y[x2], r_y) or
+        values_in_range(y_x[y1], r_x) or
+        values_in_range(y_x[y2], r_x)
     )
 
 
-def point_range(
-    p: Pos, border: list[Pos], external_border: set[Pos]
-) -> tuple:
-    max_up, max_down, max_left, max_right = (
-        list(takewhile(
-            lambda p: p not in external_border,
-            (complex(*p) + i * d for i in count())
-        ))
-        for d in [1j, -1j, -1, 1]
-    )
-    return (
-        min(e.imag for e in max_left),
-        max(e.real for e in max_right),
-        min(e.imag for e in max_down),
-        max(e.imag for e in max_up),
-    )
+def values_in_range(values: list, r: range) -> bool:
+    start, end = r.start, r.stop - 1
+    return len(
+        values[bisect_left(values, start):bisect_right(values, end)]
+    ) > 0
 
 
-for p1, p2 in segments:
-    x_coord, y_coord = zip(p1, p2)
-    plt.plot(x_coord, y_coord)
+border, external_border = build_border(segments, 1)
+scanner = build_scanner(external_border)
 
-plt.show()
-
-border, external_border = build_border(segments, -1)
-
-result = 0
-for p1 in positions:
-    min_x, max_x, min_y, max_y = point_range(p1, border, external_border)
+result = (0, (0, 0), (0, 0))
+for p1 in tqdm.tqdm(positions):
     for p2 in positions:
-        if (min_x <= p2[0] <= max_x) and (min_y <= p2[1] <= max_y):
-            area = (abs(p1[0] - p2[0]) + 1) * (abs(p1[1] - p2[1]) + 1)
-            if (p1 < p2) and (area > result):
-                if rectangle_is_interior(p1, p2, external_border):
-                    result = max(result, area)
+        area = (abs(p1[0] - p2[0]) + 1) * (abs(p1[1] - p2[1]) + 1)
+        if (p1 < p2) and (area > result[0]):
+            if rectangle_is_interior(p1, p2, scanner):
+                result = max(result, (area, p1, p2))
 
 print(result)
+
+import matplotlib.pyplot as plt
+import matplotlib.patches as patches
+
+fig, ax = plt.subplots()
+for p1, p2 in segments:
+    x_coord, y_coord = zip(p1, p2)
+    ax.plot(x_coord, y_coord)
+
+ax.plot(
+    [v.real for v in external_border],
+    [v.imag for v in external_border],
+    color='black'
+)
+
+rect = patches.Rectangle(
+    result[1], result[2][0] - result[1][0],
+    result[2][1] - result[1][1],
+    linewidth=1, edgecolor='r', facecolor='none'
+)
+
+ax.add_patch(rect)
+plt.show()
