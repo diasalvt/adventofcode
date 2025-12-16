@@ -1,6 +1,7 @@
 from itertools import product, compress
 from functools import reduce
 import operator
+import numpy as np
 
 
 Puzzle = tuple[
@@ -28,10 +29,10 @@ def load(filename: str) -> list[Puzzle]:
             for button_position in button_positions
         ]
 
-        joltage = set(
+        joltage = [
             int(j_i)
             for j_i in joltage[1:-1].split(',')
-        )
+        ]
         result.append((press, buttons, joltage))
 
     return result
@@ -54,3 +55,13 @@ result = sum(
 )
 
 print(result)
+
+matrix_res = [
+    (np.array(buttons).astype(int).T, np.array([count]).T)
+    for _, buttons, count in puzzles
+]
+
+results = [
+    sum(np.round(np.linalg.lstsq(matrix, res)[0]))
+    for matrix, res in matrix_res
+]
