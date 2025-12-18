@@ -1,8 +1,8 @@
 from itertools import product, compress
 from functools import reduce
 import operator
+import sympy
 import numpy as np
-import scipy
 
 
 Puzzle = tuple[
@@ -69,5 +69,7 @@ results = [
 
 
 def solve(matrix: np.ndarray, result: np.ndarray) -> np.ndarray:
-    kernel = scipy.linalg.null_space(matrix)
-    x, _, _, _ = np.linalg.lstsq(matrix, result)
+    m, r = sympy.Matrix(matrix), sympy.Matrix(result)
+    A, params = m.gauss_jordan_solve(r)
+    taus = {tau: 0 for tau in params}
+    return A, params
