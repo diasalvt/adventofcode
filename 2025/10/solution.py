@@ -2,6 +2,7 @@ from itertools import product, compress
 from functools import reduce
 import operator
 import numpy as np
+import scipy
 
 
 Puzzle = tuple[
@@ -42,7 +43,7 @@ def xor(*t: tuple[bool, ...]) -> tuple[bool, ...]:
     return tuple(reduce(operator.xor, t_i) for t_i in zip(*t))
 
 
-puzzles = load('test.txt')
+puzzles = load('input.txt')
 
 
 result = sum(
@@ -65,3 +66,8 @@ results = [
     sum(np.round(np.linalg.lstsq(matrix, res)[0]))
     for matrix, res in matrix_res
 ]
+
+
+def solve(matrix: np.ndarray, result: np.ndarray) -> np.ndarray:
+    kernel = scipy.linalg.null_space(matrix)
+    x, _, _, _ = np.linalg.lstsq(matrix, result)
