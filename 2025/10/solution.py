@@ -1,8 +1,8 @@
 from itertools import product, compress
 from functools import reduce
 import operator
-import sympy
 import numpy as np
+from scipy.optimize import linprog
 
 
 Puzzle = tuple[
@@ -62,14 +62,19 @@ matrix_res = [
     for _, buttons, count in puzzles
 ]
 
-results = [
-    sum(np.round(np.linalg.lstsq(matrix, res)[0]))
-    for matrix, res in matrix_res
-]
-
 
 def solve(matrix: np.ndarray, result: np.ndarray) -> np.ndarray:
-    m, r = sympy.Matrix(matrix), sympy.Matrix(result)
-    A, params = m.gauss_jordan_solve(r)
-    taus = {tau: 0 for tau in params}
-    return A, params
+    return linprog(
+        np.array([1]*matrix.shape[1]),
+        A_eq=matrix,
+        b_eq=result,
+        integrality=1
+    ).x
+
+
+result = sum(
+    sum(solve(m, r))
+    for m, r in matrix_res
+)
+
+print(result)
